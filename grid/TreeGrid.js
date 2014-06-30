@@ -9,7 +9,9 @@ define([
 	"dojo/dom-class",
 	"dojo/query",
 	"dojo/keys",
+	"dojo/aspect",
 	"dijit/tree/ForestStoreModel",
+	"dijit/focus",
 	"./DataGrid",
 	"./_Layout",
 	"./_FocusManager",
@@ -18,8 +20,8 @@ define([
 	"./TreeSelection",
 	"./cells/tree",
 	"./_TreeView"
-], function(dojo, dojox, declare, array, lang, event, domAttr, domClass, query, keys, ForestStoreModel,
-	DataGrid, _Layout, _FocusManager, _RowManager, _EditManager, TreeSelection, TreeCell){
+], function(dojo, dojox, declare, array, lang, event, domAttr, domClass, query, keys, aspect, ForestStoreModel,
+	Focus, DataGrid, _Layout, _FocusManager, _RowManager, _EditManager, TreeSelection, TreeCell, TreeView){
 
 dojo.experimental("dojox.grid.TreeGrid");
 
@@ -843,7 +845,111 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 		}
 		return this.inherited(arguments);
 	},
-	onKeyDown: function(e){
+		/**
+		 * Programmatically expands or collapses an row in a dojox.grid.TreeGrid.
+		 * 
+		 * @public
+		 * @function
+		 * @param {String} rowIndexPath The slash-separated path to the row index.
+		 * @param {Boolean} open Set to true to expand, and false to collapse.
+		 * @param {Function} callback The function to call once the expansion or collapse has completed
+		 *                            since this operation may require loading children that are not
+		 *                            yet loaded.
+		 */
+		setOpen: function(rowIndexPath, open, callback) {
+			if (!lang.isString(rowIndexPath)) rowIndexPath = "" + rowIndexPath;
+			var rootIndex = parseInt(rowIndexPath.split("/")[0], 10);
+			var rootRow = this._by_idx[rootIndex];
+			if (! rootRow) {
+				console.log("NO ROOT ROW FOUND FOR: " + rootIndex);
+				return;
+			}
+			var rootIdty = rootRow.idty;
+			for (var index = 0; index < this.views.views.length; index++) {
+				var view = this.views.views[index];
+				if (!view) {
+					continue;
+				}
+				if (view._expandos) {
+					var expandos = view._expandos[rootIdty];
+					if (!expandos) {
+						continue;
+					}
+					var expandoKey = "dojoxGridRowToggle-" + rowIndexPath.replace(/\//g,"-");
+					var expando = expandos[expandoKey];
+					if (!expando) {
+						console.log("NO EXPANDO FOUND FOR " + expandoKey);
+						for (var expandoKey in expandos) console.log(expandoKey);
+						continue;
+					}					
+					if (callback) {
+						var openHandle = null;
+
+						var openCallback = function(open) {
+							if (openHandle) {
+								openHandle.remove();
+								delete openHandle;
+								openHandle = null;
+							}
+							callback();
+						};
+						openHandle = aspect.after(expando, "_setOpen", openCallback);
+					}
+					expando.setOpen(open);
+				}
+			}
+		},
+	onKeyDown: function(e) {
+		if((e.ctrlKey || e.metaKey || e.altKey) && e.shiftKey){
+			var ltr = dojo._isBodyLtr();
+			var openKey = (ltr) ? keys.RIGHT_ARROW : keys.LEFT_ARROW;
+			var closeKey = (ltr) ? keys.LEFT_ARROW : keys.RIGHT_ARROW;
+			var expandoCell = this.layout.cells[this.expandoCell];
+			var focusCellIndex = this.focus.cell.index;
+			switch(e.keyCode){
+				case openKey:
+				case closeKey:
+					var focusRow = this.focus.rowIndex;
+					var treeGrid = this;
+					var refocus = function() {
+						var cell = treeGrid.getCell(focusCellIndex);
+						var view = null;
+						for (var vi = 0; vi < treeGrid.views.views.length; vi++) {
+							if (treeGrid.views.views[vi] instanceof TreeView) {
+								view = treeGrid.views.views[vi];
+								break;
+							}
+						}
+						var cellNode = view.getCellNode(focusRow, focusCellIndex);
+						
+						//dFocus.focus(treeGrid.domNode);
+						treeGrid.focus.setFocusIndex("0", 0);
+						treeGrid.focus.setFocusIndex(focusRow, focusCellIndex);
+						view.focus();
+						//dFocus.focus(treeGrid.domNode);
+						//treeGrid.focus.focusGrid();
+						domAttr.set(cellNode, "tabindex", "0");
+						Focus.focus(cellNode);
+						domAttr.set(cellNode, "tabindex", "-1");
+						
+					};
+					var callback = function() {
+						// TODO(bcaceres): this is a bit of a hack because focus is lost when the
+						// grid structure changes.  Sometimes we refocus a cell node, but the node is
+						// erased and replaced afterward.  I have not been able to find the correct
+						// method to latch onto to avoid the timing issue.  Worst case scenario is the
+						// user needs to tab back into the grid and navigate back to the cell that they
+						// had previously focused.  This is still better than what Dojo provided by default.
+						refocus();
+						setTimeout(refocus, 500);
+					};
+					this.setOpen(focusRow, (e.keyCode == openKey), callback);
+					return;
+				default:
+					// fall through
+					break;
+			}
+		}
 		if(e.altKey || e.metaKey){
 			return;
 		}
@@ -868,6 +974,7 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 				break;
 		}
 	},
+	
 	canEdit: function(inCell, inRowIndex){
 		var node = inCell.getNode(inRowIndex);
 		return node && this._canEdit;
