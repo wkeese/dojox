@@ -845,61 +845,63 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 		}
 		return this.inherited(arguments);
 	},
-		/**
-		 * Programmatically expands or collapses an row in a dojox.grid.TreeGrid.
-		 * 
-		 * @public
-		 * @function
-		 * @param {String} rowIndexPath The slash-separated path to the row index.
-		 * @param {Boolean} open Set to true to expand, and false to collapse.
-		 * @param {Function} callback The function to call once the expansion or collapse has completed
-		 *                            since this operation may require loading children that are not
-		 *                            yet loaded.
-		 */
-		setOpen: function(rowIndexPath, open, callback) {
-			if (!lang.isString(rowIndexPath)) rowIndexPath = "" + rowIndexPath;
-			var rootIndex = parseInt(rowIndexPath.split("/")[0], 10);
-			var rootRow = this._by_idx[rootIndex];
-			if (! rootRow) {
-				console.log("NO ROOT ROW FOUND FOR: " + rootIndex);
-				return;
+
+	setOpen: function(rowIndexPath, open, callback){
+		// summary:
+		//		Programmatically expands or collapses an row in a dojox.grid.TreeGrid.
+		// rowIndexPath: String
+		//		The slash-separated path to the row index.
+		// open: Boolean
+		//		Set to true to expand, and false to collapse.
+		// callback: Function
+		//		The function to call once the expansion or collapse has completed
+		//		since this operation may require loading children that are not
+		//		yet loaded.
+
+		if(!lang.isString(rowIndexPath)) rowIndexPath = "" + rowIndexPath;
+		var rootIndex = parseInt(rowIndexPath.split("/")[0], 10);
+		var rootRow = this._by_idx[rootIndex];
+		if(!rootRow){
+			console.log("NO ROOT ROW FOUND FOR: " + rootIndex);
+			return;
+		}
+		var rootIdty = rootRow.idty;
+		for(var index = 0; index < this.views.views.length; index++){
+			var view = this.views.views[index];
+			if(!view){
+				continue;
 			}
-			var rootIdty = rootRow.idty;
-			for (var index = 0; index < this.views.views.length; index++) {
-				var view = this.views.views[index];
-				if (!view) {
+			if(view._expandos){
+				var expandos = view._expandos[rootIdty];
+				if(!expandos){
 					continue;
 				}
-				if (view._expandos) {
-					var expandos = view._expandos[rootIdty];
-					if (!expandos) {
-						continue;
-					}
-					var expandoKey = "dojoxGridRowToggle-" + rowIndexPath.replace(/\//g,"-");
-					var expando = expandos[expandoKey];
-					if (!expando) {
-						console.log("NO EXPANDO FOUND FOR " + expandoKey);
-						for (var expandoKey in expandos) console.log(expandoKey);
-						continue;
-					}					
-					if (callback) {
-						var openHandle = null;
-
-						var openCallback = function(open) {
-							if (openHandle) {
-								openHandle.remove();
-								delete openHandle;
-								openHandle = null;
-							}
-							callback();
-						};
-						openHandle = aspect.after(expando, "_setOpen", openCallback);
-					}
-					expando.setOpen(open);
+				var expandoKey = "dojoxGridRowToggle-" + rowIndexPath.replace(/\//g,"-");
+				var expando = expandos[expandoKey];
+				if(!expando){
+					console.log("NO EXPANDO FOUND FOR " + expandoKey);
+					for(var expandoKey in expandos) console.log(expandoKey);
+					continue;
 				}
+				if(callback){
+					var openHandle = null;
+
+					var openCallback = function(open){
+						if(openHandle){
+							openHandle.remove();
+							delete openHandle;
+							openHandle = null;
+						}
+						callback();
+					};
+					openHandle = aspect.after(expando, "_setOpen", openCallback, true);
+				}
+				expando.setOpen(open);
 			}
-		},
-	onKeyDown: function(e) {
+		}
+	},
+
+	onKeyDown: function(e){
 		if((e.ctrlKey || e.metaKey || e.altKey) && e.shiftKey){
 			var ltr = dojo._isBodyLtr();
 			var openKey = (ltr) ? keys.RIGHT_ARROW : keys.LEFT_ARROW;
@@ -911,11 +913,11 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 				case closeKey:
 					var focusRow = this.focus.rowIndex;
 					var treeGrid = this;
-					var refocus = function() {
+					var refocus = function(){
 						var cell = treeGrid.getCell(focusCellIndex);
 						var view = null;
-						for (var vi = 0; vi < treeGrid.views.views.length; vi++) {
-							if (treeGrid.views.views[vi] instanceof TreeView) {
+						for(var vi = 0; vi < treeGrid.views.views.length; vi++){
+							if(treeGrid.views.views[vi] instanceof TreeView){
 								view = treeGrid.views.views[vi];
 								break;
 							}
@@ -933,7 +935,7 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 						domAttr.set(cellNode, "tabindex", "-1");
 						
 					};
-					var callback = function() {
+					var callback = function(){
 						// TODO(bcaceres): this is a bit of a hack because focus is lost when the
 						// grid structure changes.  Sometimes we refocus a cell node, but the node is
 						// erased and replaced afterward.  I have not been able to find the correct
@@ -943,7 +945,7 @@ var TreeGrid = declare("dojox.grid.TreeGrid", DataGrid, {
 						refocus();
 						setTimeout(refocus, 500);
 					};
-					this.setOpen(focusRow, (e.keyCode == openKey), callback);
+					this.setOpen(focusRow,(e.keyCode == openKey), callback);
 					return;
 				default:
 					// fall through
@@ -1011,7 +1013,7 @@ TreeGrid.markupFactory = function(props, node, ctor, cellFunc){
 					(rows = query("> thead > tr", table)).length == 1){
 			var tr = rows[0];
 			return query("> th", rows[0]).map(function(th){
-				// Grab type and field (the only ones that are shared
+				// Grab type and field(the only ones that are shared
 				var cell = {
 					type: lang.trim(domAttr.get(th, "cellType")||""),
 					field: lang.trim(domAttr.get(th, "field")||"")
@@ -1037,7 +1039,7 @@ TreeGrid.markupFactory = function(props, node, ctor, cellFunc){
 					}
 					cell.type = cell.type || dojox.grid.cells.SubtableCell;
 				}else{
-					// Grab our other stuff we need (mostly what's in the normal
+					// Grab our other stuff we need(mostly what's in the normal
 					// Grid)
 					cell.name = lang.trim(domAttr.get(th, "name")||th.innerHTML);
 					if(domAttr.has(th, "width")){
